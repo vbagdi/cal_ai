@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { db, createEmptyEntry, generateId, getDefaultCalorieTarget, addExerciseToHistory } from '../utils/db'
+import { db, createEmptyEntry, generateId, getDefaultCalorieTarget, addExerciseToHistory, addActivityToHistory } from '../utils/db'
 import { getNowTimePST } from '../utils/dateUtils'
 
 /**
@@ -24,10 +24,11 @@ export function useDaily(date) {
         const existing = await db.dailyEntries.get(date)
         if (!cancelled) {
           if (existing) {
-            // Ensure exercises array exists for backwards compatibility
+            // Ensure exercises and cardio arrays exist for backwards compatibility
             setEntry({
               ...existing,
-              exercises: existing.exercises || []
+              exercises: existing.exercises || [],
+              cardio: existing.cardio || []
             })
           } else {
             // Get default calorie target for new entries
@@ -200,6 +201,40 @@ export function useDaily(date) {
     await saveEntry(updatedEntry)
   }, [entry, saveEntry])
 
+  // Add a cardio activity
+  const addCardio = useCallback(async (activity) => {
+    const newCardio = {
+      id: generateId(),
+      name: activity.name || '',
+      duration: activity.duration || 0,
+      caloriesBurned: activity.caloriesBurned || 0,
+      time: getNowTimePST()
+    }
+
+    const updatedEntry = {
+      ...entry,
+      cardio: [...(entry.cardio || []), newCardio]
+    }
+
+    await saveEntry(updatedEntry)
+
+    if (activity.name) {
+      await addActivityToHistory(activity.name)
+    }
+
+    return newCardio
+  }, [entry, saveEntry])
+
+  // Delete a cardio activity
+  const deleteCardio = useCallback(async (cardioId) => {
+    const updatedEntry = {
+      ...entry,
+      cardio: (entry.cardio || []).filter(c => c.id !== cardioId)
+    }
+
+    await saveEntry(updatedEntry)
+  }, [entry, saveEntry])
+
   // Update daily notes
   const updateDailyNotes = useCallback(async (notes) => {
     const updatedEntry = {
@@ -222,7 +257,9 @@ export function useDaily(date) {
 
   // Computed values
   const totalCalories = entry.meals.reduce((sum, meal) => sum + (meal.totalCal || 0), 0)
-  const remainingCalories = entry.targetCalories - totalCalories
+  const totalCaloriesBurned = (entry.cardio || []).reduce((sum, c) => sum + (c.caloriesBurned || 0), 0)
+  const netCalories = totalCalories - totalCaloriesBurned
+  const remainingCalories = entry.targetCalories - netCalories
 
   return {
     // Data
@@ -232,6 +269,8 @@ export function useDaily(date) {
 
     // Computed
     totalCalories,
+    totalCaloriesBurned,
+    netCalories,
     remainingCalories,
 
     // Meal actions
@@ -243,6 +282,10 @@ export function useDaily(date) {
     addExercise,
     updateExercise,
     deleteExercise,
+
+    // Cardio actions
+    addCardio,
+    deleteCardio,
 
     // Workout actions (legacy)
     addWorkout,

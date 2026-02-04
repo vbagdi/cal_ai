@@ -19,6 +19,14 @@ db.version(3).stores({
   exerciseHistory: 'name' // Unique exercise names for autocomplete
 })
 
+// Version 4: Add activity history for cardio autocomplete
+db.version(4).stores({
+  dailyEntries: 'date',
+  auth: 'id',
+  exerciseHistory: 'name',
+  activityHistory: 'name' // Unique activity names for autocomplete
+})
+
 /**
  * Exercise History Schema:
  * {
@@ -81,6 +89,7 @@ export function createEmptyEntry(date, targetCalories = 2000) {
     date,
     meals: [],
     exercises: [], // New format for individual exercises
+    cardio: [], // Cardio/activity entries with calories burned
     workouts: [], // Keep for backwards compatibility
     dailyNotes: '',
     targetCalories
@@ -110,6 +119,7 @@ export async function deleteAllData() {
   await db.dailyEntries.clear()
   await db.auth.clear()
   await db.exerciseHistory.clear()
+  await db.activityHistory.clear()
 }
 
 // Exercise history helper functions
@@ -156,8 +166,46 @@ export async function searchExerciseHistory(query) {
 export async function getDatesWithData() {
   const entries = await db.dailyEntries.toArray()
   return entries
-    .filter(e => e.meals?.length > 0 || e.exercises?.length > 0 || e.workouts?.length > 0)
+    .filter(e => e.meals?.length > 0 || e.exercises?.length > 0 || e.cardio?.length > 0 || e.workouts?.length > 0)
     .map(e => e.date)
+}
+
+// Activity history helper functions (for cardio autocomplete)
+export async function addActivityToHistory(activityName) {
+  const normalizedName = activityName.toLowerCase().trim()
+  const existing = await db.activityHistory.get(normalizedName)
+
+  if (existing) {
+    await db.activityHistory.update(normalizedName, {
+      lastUsed: Date.now(),
+      useCount: (existing.useCount || 0) + 1
+    })
+  } else {
+    await db.activityHistory.put({
+      name: normalizedName,
+      displayName: activityName.trim(),
+      lastUsed: Date.now(),
+      useCount: 1
+    })
+  }
+}
+
+export async function searchActivityHistory(query) {
+  if (!query || query.length < 1) {
+    return await db.activityHistory
+      .orderBy('lastUsed')
+      .reverse()
+      .limit(10)
+      .toArray()
+  }
+
+  const normalizedQuery = query.toLowerCase().trim()
+  const allActivities = await db.activityHistory.toArray()
+
+  return allActivities
+    .filter(a => a.name.includes(normalizedQuery))
+    .sort((a, b) => b.useCount - a.useCount)
+    .slice(0, 10)
 }
 
 // Get default calorie target from auth settings

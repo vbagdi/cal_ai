@@ -6,6 +6,7 @@ import { SettingsModal } from './components/SettingsModal'
 import { SetupScreen } from './components/SetupScreen'
 import { LoginScreen } from './components/LoginScreen'
 import { ExerciseModal } from './components/ExerciseModal'
+import { CardioModal } from './components/CardioModal'
 import { getDatesWithData } from './utils/db'
 import { getTodayPST, formatDateDisplay, getShortDayName, getDayNumber, addDays, getRecentDatesPST } from './utils/dateUtils'
 import './App.css'
@@ -27,12 +28,16 @@ function App() {
   const {
     entry,
     totalCalories,
+    totalCaloriesBurned,
+    netCalories,
     remainingCalories,
     loading,
     addMeal,
     deleteMeal,
     addExercise,
     deleteExercise,
+    addCardio,
+    deleteCardio,
     updateDailyNotes,
     updateTargetCalories
   } = useDaily(selectedDate)
@@ -96,8 +101,8 @@ function App() {
 
   const goToToday = () => setSelectedDate(today)
 
-  const progressPercent = Math.min((totalCalories / entry.targetCalories) * 100, 100)
-  const isOverBudget = totalCalories > entry.targetCalories
+  const progressPercent = Math.min((netCalories / entry.targetCalories) * 100, 100)
+  const isOverBudget = netCalories > entry.targetCalories
 
   const handleAddMeal = async (e) => {
     e.preventDefault()
@@ -276,11 +281,11 @@ function App() {
       <main className="px-4 -mt-14 pb-24 space-y-4">
         {/* Calorie Progress Card */}
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-5">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center justify-between mb-2">
             <div>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Consumed</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Net Calories</p>
               <p className={`text-3xl font-bold ${isOverBudget ? 'text-red-500' : 'text-gray-800 dark:text-white'}`}>
-                {totalCalories.toLocaleString()}
+                {netCalories.toLocaleString()}
                 <span className="text-lg font-normal text-gray-400"> cal</span>
               </p>
             </div>
@@ -292,6 +297,18 @@ function App() {
                 {isOverBudget ? '+' : ''}{Math.abs(remainingCalories).toLocaleString()}
               </p>
             </div>
+          </div>
+
+          {/* Eaten / Burned breakdown */}
+          <div className="flex gap-4 mb-4 text-sm">
+            <span className="text-gray-500 dark:text-gray-400">
+              Eaten: <span className="font-semibold text-gray-700 dark:text-gray-200">{totalCalories.toLocaleString()}</span>
+            </span>
+            {totalCaloriesBurned > 0 && (
+              <span className="text-gray-500 dark:text-gray-400">
+                Burned: <span className="font-semibold text-orange-500">-{totalCaloriesBurned.toLocaleString()}</span>
+              </span>
+            )}
           </div>
 
           {/* Progress Bar */}
@@ -458,6 +475,70 @@ function App() {
           )}
         </div>
 
+        {/* Cardio Section */}
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-4">
+          <div className="flex justify-between items-center mb-3">
+            <h2 className="font-semibold text-gray-800 dark:text-white flex items-center gap-2">
+              <span className="text-lg">🏃</span> Cardio
+            </h2>
+            <span className="text-sm text-gray-500 dark:text-gray-400">
+              {(entry.cardio || []).length > 0 && (
+                <span className="text-orange-500 font-semibold">
+                  {totalCaloriesBurned} cal burned
+                </span>
+              )}
+              {(entry.cardio || []).length === 0 && '0 logged'}
+            </span>
+          </div>
+
+          {(entry.cardio || []).length === 0 ? (
+            <div className="text-center py-6">
+              <p className="text-gray-400 dark:text-gray-500 text-sm">No cardio logged {isToday ? 'today' : 'on this day'}</p>
+              <button
+                onClick={() => setActiveModal('cardio')}
+                className="mt-2 text-orange-500 text-sm font-medium"
+              >
+                + Log cardio
+              </button>
+            </div>
+          ) : (
+            <>
+              <ul className="space-y-2">
+                {(entry.cardio || []).map((c) => (
+                  <li
+                    key={c.id}
+                    className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/50 rounded-xl"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-gray-800 dark:text-gray-100">
+                        {c.name}
+                      </p>
+                      <p className="text-sm text-orange-600 dark:text-orange-400">
+                        {c.caloriesBurned} cal burned
+                        {c.duration > 0 && ` - ${c.duration} min`}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => deleteCardio(c.id)}
+                      className="p-1.5 text-gray-400 hover:text-red-500 transition-colors"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              <button
+                onClick={() => setActiveModal('cardio')}
+                className="mt-3 w-full py-2 text-orange-500 text-sm font-medium border border-orange-200 dark:border-orange-800 rounded-xl hover:bg-orange-50 dark:hover:bg-orange-900/20"
+              >
+                + Add more cardio
+              </button>
+            </>
+          )}
+        </div>
+
         {/* Daily Notes Section */}
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-4">
           <h2 className="font-semibold text-gray-800 dark:text-white flex items-center gap-2 mb-3">
@@ -524,6 +605,22 @@ function App() {
                 </svg>
               </div>
               <span className="font-medium text-gray-700 dark:text-gray-200">Log Exercises</span>
+            </button>
+
+            {/* Log Cardio Button */}
+            <button
+              onClick={() => {
+                setActiveModal('cardio')
+                setShowFab(false)
+              }}
+              className="flex items-center gap-2 bg-white dark:bg-gray-800 pl-4 pr-5 py-3 rounded-full shadow-lg animate-fade-in"
+            >
+              <div className="w-10 h-10 bg-orange-500 rounded-full flex items-center justify-center">
+                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                </svg>
+              </div>
+              <span className="font-medium text-gray-700 dark:text-gray-200">Log Cardio</span>
             </button>
           </>
         )}
@@ -612,6 +709,15 @@ function App() {
         onAddExercise={addExercise}
         onDeleteExercise={deleteExercise}
         exercises={entry.exercises || []}
+      />
+
+      {/* Cardio Modal */}
+      <CardioModal
+        isOpen={activeModal === 'cardio'}
+        onClose={() => setActiveModal(null)}
+        onAddCardio={addCardio}
+        onDeleteCardio={deleteCardio}
+        cardio={entry.cardio || []}
       />
 
       {/* Food Scanner Modal */}
