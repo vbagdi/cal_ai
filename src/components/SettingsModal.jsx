@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { testApiKey } from '../utils/foodAnalyzer'
+import { getPSTDebugString } from '../utils/dateUtils'
 
 export function SettingsModal({ isOpen, onClose }) {
   const {
@@ -32,6 +33,9 @@ export function SettingsModal({ isOpen, onClose }) {
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState(null) // { success: boolean, error?: string }
 
+  // Debug date - updates every second while settings is open
+  const [debugDate, setDebugDate] = useState('')
+
   useEffect(() => {
     if (isOpen) {
       // Show the decrypted API key if available, otherwise empty
@@ -45,6 +49,11 @@ export function SettingsModal({ isOpen, onClose }) {
 
       // Check biometric availability
       checkBiometricAvailable().then(setBiometricAvailable)
+
+      // Start debug date clock
+      setDebugDate(getPSTDebugString())
+      const timer = setInterval(() => setDebugDate(getPSTDebugString()), 1000)
+      return () => clearInterval(timer)
     }
   }, [isOpen, decryptedApiKey, checkBiometricAvailable])
 
@@ -270,6 +279,13 @@ export function SettingsModal({ isOpen, onClose }) {
                   Your API key is encrypted with AES-256-GCM using a key derived from your password. It's stored locally and never sent anywhere except to Anthropic's API.
                 </p>
               </div>
+            </div>
+
+            {/* Debug Date */}
+            <div className="bg-gray-100 dark:bg-gray-700/50 rounded-xl p-3">
+              <p className="text-xs text-gray-500 dark:text-gray-400 font-mono text-center">
+                PST: {debugDate}
+              </p>
             </div>
 
             {/* Danger Zone */}

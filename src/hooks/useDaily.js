@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { db, createEmptyEntry, generateId, getDefaultCalorieTarget, addExerciseToHistory } from '../utils/db'
+import { getNowTimePST } from '../utils/dateUtils'
 
 /**
  * Custom hook for loading and saving daily entries
@@ -68,7 +69,7 @@ export function useDaily(date) {
   const addMeal = useCallback(async (meal) => {
     const newMeal = {
       id: generateId(),
-      time: meal.time || new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }),
+      time: meal.time || getNowTimePST(),
       name: meal.name || '',
       items: meal.items || '',
       totalCal: meal.totalCal || 0,
@@ -154,7 +155,7 @@ export function useDaily(date) {
       weight: exercise.weight || 0,
       reps: exercise.reps || 0,
       sets: exercise.sets || 1,
-      time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })
+      time: getNowTimePST()
     }
 
     const updatedEntry = {

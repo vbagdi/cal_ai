@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useDaily } from './hooks/useDaily'
 import { useAuth } from './contexts/AuthContext'
 import { FoodScanner } from './components/FoodScanner'
@@ -7,18 +7,22 @@ import { SetupScreen } from './components/SetupScreen'
 import { LoginScreen } from './components/LoginScreen'
 import { ExerciseModal } from './components/ExerciseModal'
 import { getDatesWithData } from './utils/db'
+import { getTodayPST, formatDateDisplay, getShortDayName, getDayNumber, addDays, getRecentDatesPST } from './utils/dateUtils'
 import './App.css'
 
 function App() {
   const { isAuthenticated, needsSetup, authLoading, lock } = useAuth()
-  const today = new Date().toISOString().split('T')[0]
+
+  // Use PST for "today" - mutable via midnight rollover
+  const [today, setToday] = useState(() => getTodayPST())
 
   // Date navigation state
-  const [selectedDate, setSelectedDate] = useState(today)
+  const [selectedDate, setSelectedDate] = useState(() => getTodayPST())
   const [datesWithData, setDatesWithData] = useState([])
   const [showDatePicker, setShowDatePicker] = useState(false)
   const [editingCalories, setEditingCalories] = useState(false)
   const [tempCalorieTarget, setTempCalorieTarget] = useState('')
+  const midnightCheckRef = useRef(null)
 
   const {
     entry,
@@ -37,6 +41,37 @@ function App() {
   const [mealForm, setMealForm] = useState({ name: '', items: '', totalCal: '' })
   const [showFab, setShowFab] = useState(false)
 
+  // Midnight rollover check: update "today" if the PST date has changed
+  const checkDateRollover = useCallback(() => {
+    const currentToday = getTodayPST()
+    setToday(prev => {
+      if (prev !== currentToday) {
+        console.log(`[Date] Day rolled over: ${prev} -> ${currentToday}`)
+        // If user was viewing "today" (the old today), move them to the new today
+        setSelectedDate(prevSelected => prevSelected === prev ? currentToday : prevSelected)
+        return currentToday
+      }
+      return prev
+    })
+  }, [])
+
+  // Poll for midnight rollover every 30 seconds + on visibility change
+  useEffect(() => {
+    midnightCheckRef.current = setInterval(checkDateRollover, 30_000)
+
+    const handleVisibility = () => {
+      if (!document.hidden) {
+        checkDateRollover()
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+
+    return () => {
+      clearInterval(midnightCheckRef.current)
+      document.removeEventListener('visibilitychange', handleVisibility)
+    }
+  }, [checkDateRollover])
+
   // Load dates with data for calendar indicators
   useEffect(() => {
     async function loadDatesWithData() {
@@ -46,50 +81,20 @@ function App() {
     loadDatesWithData()
   }, [entry]) // Reload when entry changes
 
-  // Format selected date nicely
-  const formatDate = (dateStr) => {
-    const date = new Date(dateStr + 'T00:00:00')
-    return date.toLocaleDateString('en-US', {
-      weekday: 'long',
-      month: 'long',
-      day: 'numeric'
-    })
-  }
-
   const isToday = selectedDate === today
   const isViewingPast = selectedDate < today
 
   // Date navigation
-  const goToPrevDay = () => {
-    const date = new Date(selectedDate + 'T00:00:00')
-    date.setDate(date.getDate() - 1)
-    setSelectedDate(date.toISOString().split('T')[0])
-  }
+  const goToPrevDay = () => setSelectedDate(addDays(selectedDate, -1))
 
   const goToNextDay = () => {
-    const date = new Date(selectedDate + 'T00:00:00')
-    date.setDate(date.getDate() + 1)
-    const nextDate = date.toISOString().split('T')[0]
-    // Don't go past today
+    const nextDate = addDays(selectedDate, 1)
     if (nextDate <= today) {
       setSelectedDate(nextDate)
     }
   }
 
-  const goToToday = () => {
-    setSelectedDate(today)
-  }
-
-  // Quick date picker (last 7 days)
-  const getRecentDates = () => {
-    const dates = []
-    for (let i = 0; i < 7; i++) {
-      const date = new Date()
-      date.setDate(date.getDate() - i)
-      dates.push(date.toISOString().split('T')[0])
-    }
-    return dates
-  }
+  const goToToday = () => setSelectedDate(today)
 
   const progressPercent = Math.min((totalCalories / entry.targetCalories) * 100, 100)
   const isOverBudget = totalCalories > entry.targetCalories
@@ -196,13 +201,8 @@ function App() {
             className="flex-1 mx-3 text-center"
           >
             <p className="text-lg font-semibold">
-              {isToday ? 'Today' : formatDate(selectedDate)}
+              {formatDateDisplay(selectedDate)}
             </p>
-            {!isToday && (
-              <p className="text-emerald-100 text-xs mt-0.5">
-                Tap to see more dates
-              </p>
-            )}
           </button>
 
           <button
@@ -220,12 +220,11 @@ function App() {
         {showDatePicker && (
           <div className="mt-3 bg-white/10 rounded-xl p-3">
             <div className="flex flex-wrap gap-2 justify-center">
-              {getRecentDates().map((date) => {
+              {getRecentDatesPST(7).map((date) => {
                 const hasData = datesWithData.includes(date)
                 const isSelected = date === selectedDate
-                const dateObj = new Date(date + 'T00:00:00')
-                const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'short' })
-                const dayNum = dateObj.getDate()
+                const dayName = getShortDayName(date)
+                const dayNum = getDayNumber(date)
 
                 return (
                   <button
