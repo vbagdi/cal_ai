@@ -12,6 +12,23 @@ db.version(2).stores({
   auth: 'id' // Single record with id='main'
 })
 
+// Version 3: Add exercise history for autocomplete
+db.version(3).stores({
+  dailyEntries: 'date',
+  auth: 'id',
+  exerciseHistory: 'name' // Unique exercise names for autocomplete
+})
+
+/**
+ * Exercise History Schema:
+ * {
+ *   name: string,           // Exercise name (primary key, lowercase)
+ *   displayName: string,    // Display name with original casing
+ *   lastUsed: number,       // Timestamp of last use
+ *   useCount: number        // How many times used
+ * }
+ */
+
 /**
  * Auth Schema:
  * {
@@ -43,12 +60,14 @@ db.version(2).stores({
  *       image: string | null   // Base64 image or null
  *     }
  *   ],
- *   workouts: [
+ *   exercises: [
  *     {
  *       id: string,            // Unique ID
- *       type: string,          // Workout type (e.g., "Running", "Weights")
- *       duration: number,      // Duration in minutes
- *       notes: string          // Additional notes
+ *       name: string,          // Exercise name (e.g., "Bicep curl")
+ *       weight: number,        // Weight in lbs
+ *       reps: number,          // Number of reps
+ *       sets: number,          // Number of sets (default 1)
+ *       time: string           // Time logged
  *     }
  *   ],
  *   dailyNotes: string,        // General notes for the day
@@ -61,7 +80,8 @@ export function createEmptyEntry(date, targetCalories = 2000) {
   return {
     date,
     meals: [],
-    workouts: [],
+    exercises: [], // New format for individual exercises
+    workouts: [], // Keep for backwards compatibility
     dailyNotes: '',
     targetCalories
   }
@@ -89,4 +109,59 @@ export async function hasAuthSetup() {
 export async function deleteAllData() {
   await db.dailyEntries.clear()
   await db.auth.clear()
+  await db.exerciseHistory.clear()
+}
+
+// Exercise history helper functions
+export async function addExerciseToHistory(exerciseName) {
+  const normalizedName = exerciseName.toLowerCase().trim()
+  const existing = await db.exerciseHistory.get(normalizedName)
+
+  if (existing) {
+    await db.exerciseHistory.update(normalizedName, {
+      lastUsed: Date.now(),
+      useCount: (existing.useCount || 0) + 1
+    })
+  } else {
+    await db.exerciseHistory.put({
+      name: normalizedName,
+      displayName: exerciseName.trim(),
+      lastUsed: Date.now(),
+      useCount: 1
+    })
+  }
+}
+
+export async function searchExerciseHistory(query) {
+  if (!query || query.length < 1) {
+    // Return most recently used exercises
+    return await db.exerciseHistory
+      .orderBy('lastUsed')
+      .reverse()
+      .limit(10)
+      .toArray()
+  }
+
+  const normalizedQuery = query.toLowerCase().trim()
+  const allExercises = await db.exerciseHistory.toArray()
+
+  // Filter and sort by relevance
+  return allExercises
+    .filter(ex => ex.name.includes(normalizedQuery))
+    .sort((a, b) => b.useCount - a.useCount)
+    .slice(0, 10)
+}
+
+// Get all dates that have logged data (for calendar indicators)
+export async function getDatesWithData() {
+  const entries = await db.dailyEntries.toArray()
+  return entries
+    .filter(e => e.meals?.length > 0 || e.exercises?.length > 0 || e.workouts?.length > 0)
+    .map(e => e.date)
+}
+
+// Get default calorie target from auth settings
+export async function getDefaultCalorieTarget() {
+  const auth = await getAuthData()
+  return auth?.targetCalories || 2000
 }

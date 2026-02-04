@@ -117,12 +117,31 @@ export function SetupScreen() {
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                     Daily Calorie Goal
                   </label>
-                  <input
-                    type="number"
-                    value={targetCalories}
-                    onChange={(e) => setTargetCalories(parseInt(e.target.value) || 2000)}
-                    className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                  />
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setTargetCalories(Math.max(500, targetCalories - 100))}
+                      className="w-12 h-12 flex items-center justify-center rounded-xl border-2 border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600 active:scale-95 transition-all text-xl font-bold"
+                    >
+                      -
+                    </button>
+                    <input
+                      type="number"
+                      value={targetCalories}
+                      onChange={(e) => setTargetCalories(parseInt(e.target.value) || 2000)}
+                      className="flex-1 px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-center text-lg font-semibold"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setTargetCalories(Math.min(10000, targetCalories + 100))}
+                      className="w-12 h-12 flex items-center justify-center rounded-xl border-2 border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600 active:scale-95 transition-all text-xl font-bold"
+                    >
+                      +
+                    </button>
+                  </div>
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 text-center">
+                    Adjust in increments of 100
+                  </p>
                 </div>
 
                 {error && (

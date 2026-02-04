@@ -1,15 +1,25 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useDaily } from './hooks/useDaily'
 import { useAuth } from './contexts/AuthContext'
 import { FoodScanner } from './components/FoodScanner'
 import { SettingsModal } from './components/SettingsModal'
 import { SetupScreen } from './components/SetupScreen'
 import { LoginScreen } from './components/LoginScreen'
+import { ExerciseModal } from './components/ExerciseModal'
+import { getDatesWithData } from './utils/db'
 import './App.css'
 
 function App() {
   const { isAuthenticated, needsSetup, authLoading, lock } = useAuth()
   const today = new Date().toISOString().split('T')[0]
+
+  // Date navigation state
+  const [selectedDate, setSelectedDate] = useState(today)
+  const [datesWithData, setDatesWithData] = useState([])
+  const [showDatePicker, setShowDatePicker] = useState(false)
+  const [editingCalories, setEditingCalories] = useState(false)
+  const [tempCalorieTarget, setTempCalorieTarget] = useState('')
+
   const {
     entry,
     totalCalories,
@@ -17,22 +27,69 @@ function App() {
     loading,
     addMeal,
     deleteMeal,
-    addWorkout,
-    deleteWorkout,
-    updateDailyNotes
-  } = useDaily(today)
+    addExercise,
+    deleteExercise,
+    updateDailyNotes,
+    updateTargetCalories
+  } = useDaily(selectedDate)
 
-  const [activeModal, setActiveModal] = useState(null) // 'meal' | 'workout' | 'scan' | 'settings' | null
+  const [activeModal, setActiveModal] = useState(null)
   const [mealForm, setMealForm] = useState({ name: '', items: '', totalCal: '' })
-  const [workoutForm, setWorkoutForm] = useState({ type: '', duration: '', notes: '' })
   const [showFab, setShowFab] = useState(false)
 
-  // Format today's date nicely
-  const formattedDate = new Date().toLocaleDateString('en-US', {
-    weekday: 'long',
-    month: 'long',
-    day: 'numeric'
-  })
+  // Load dates with data for calendar indicators
+  useEffect(() => {
+    async function loadDatesWithData() {
+      const dates = await getDatesWithData()
+      setDatesWithData(dates)
+    }
+    loadDatesWithData()
+  }, [entry]) // Reload when entry changes
+
+  // Format selected date nicely
+  const formatDate = (dateStr) => {
+    const date = new Date(dateStr + 'T00:00:00')
+    return date.toLocaleDateString('en-US', {
+      weekday: 'long',
+      month: 'long',
+      day: 'numeric'
+    })
+  }
+
+  const isToday = selectedDate === today
+  const isViewingPast = selectedDate < today
+
+  // Date navigation
+  const goToPrevDay = () => {
+    const date = new Date(selectedDate + 'T00:00:00')
+    date.setDate(date.getDate() - 1)
+    setSelectedDate(date.toISOString().split('T')[0])
+  }
+
+  const goToNextDay = () => {
+    const date = new Date(selectedDate + 'T00:00:00')
+    date.setDate(date.getDate() + 1)
+    const nextDate = date.toISOString().split('T')[0]
+    // Don't go past today
+    if (nextDate <= today) {
+      setSelectedDate(nextDate)
+    }
+  }
+
+  const goToToday = () => {
+    setSelectedDate(today)
+  }
+
+  // Quick date picker (last 7 days)
+  const getRecentDates = () => {
+    const dates = []
+    for (let i = 0; i < 7; i++) {
+      const date = new Date()
+      date.setDate(date.getDate() - i)
+      dates.push(date.toISOString().split('T')[0])
+    }
+    return dates
+  }
 
   const progressPercent = Math.min((totalCalories / entry.targetCalories) * 100, 100)
   const isOverBudget = totalCalories > entry.targetCalories
@@ -51,26 +108,23 @@ function App() {
     setActiveModal(null)
   }
 
-  const handleAddWorkout = async (e) => {
-    e.preventDefault()
-    if (!workoutForm.type) return
-
-    await addWorkout({
-      type: workoutForm.type,
-      duration: parseInt(workoutForm.duration, 10) || 0,
-      notes: workoutForm.notes
-    })
-
-    setWorkoutForm({ type: '', duration: '', notes: '' })
-    setActiveModal(null)
-  }
-
   const handleNotesChange = (e) => {
     updateDailyNotes(e.target.value)
   }
 
   const handleScannedMeal = async (mealData) => {
     await addMeal(mealData)
+  }
+
+  const handleSaveCalorieTarget = async () => {
+    const newTarget = parseInt(tempCalorieTarget) || entry.targetCalories
+    await updateTargetCalories(newTarget)
+    setEditingCalories(false)
+  }
+
+  const startEditingCalories = () => {
+    setTempCalorieTarget(entry.targetCalories.toString())
+    setEditingCalories(true)
   }
 
   // Show loading state while auth is initializing
@@ -101,7 +155,6 @@ function App() {
       <header className="bg-gradient-to-br from-emerald-500 to-emerald-600 text-white px-4 pt-6 pb-20 rounded-b-3xl">
         <div className="flex justify-between items-start mb-4">
           <div>
-            <p className="text-emerald-100 text-sm">{formattedDate}</p>
             <h1 className="text-2xl font-bold">CalTrack</h1>
           </div>
           <div className="flex items-center gap-2">
@@ -126,6 +179,98 @@ function App() {
             </button>
           </div>
         </div>
+
+        {/* Date Navigation */}
+        <div className="flex items-center justify-between">
+          <button
+            onClick={goToPrevDay}
+            className="p-2 bg-white/20 rounded-full hover:bg-white/30 transition-colors"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+
+          <button
+            onClick={() => setShowDatePicker(!showDatePicker)}
+            className="flex-1 mx-3 text-center"
+          >
+            <p className="text-lg font-semibold">
+              {isToday ? 'Today' : formatDate(selectedDate)}
+            </p>
+            {!isToday && (
+              <p className="text-emerald-100 text-xs mt-0.5">
+                Tap to see more dates
+              </p>
+            )}
+          </button>
+
+          <button
+            onClick={goToNextDay}
+            disabled={isToday}
+            className={`p-2 rounded-full transition-colors ${isToday ? 'opacity-30' : 'bg-white/20 hover:bg-white/30'}`}
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Date Picker Dropdown */}
+        {showDatePicker && (
+          <div className="mt-3 bg-white/10 rounded-xl p-3">
+            <div className="flex flex-wrap gap-2 justify-center">
+              {getRecentDates().map((date) => {
+                const hasData = datesWithData.includes(date)
+                const isSelected = date === selectedDate
+                const dateObj = new Date(date + 'T00:00:00')
+                const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'short' })
+                const dayNum = dateObj.getDate()
+
+                return (
+                  <button
+                    key={date}
+                    onClick={() => {
+                      setSelectedDate(date)
+                      setShowDatePicker(false)
+                    }}
+                    className={`flex flex-col items-center p-2 rounded-xl min-w-[50px] transition-colors ${
+                      isSelected
+                        ? 'bg-white text-emerald-600'
+                        : 'bg-white/20 hover:bg-white/30'
+                    }`}
+                  >
+                    <span className="text-xs font-medium">{dayName}</span>
+                    <span className="text-lg font-bold">{dayNum}</span>
+                    {hasData && !isSelected && (
+                      <div className="w-1.5 h-1.5 rounded-full bg-white mt-0.5" />
+                    )}
+                    {hasData && isSelected && (
+                      <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 mt-0.5" />
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+            {!isToday && (
+              <button
+                onClick={goToToday}
+                className="w-full mt-2 py-2 bg-white/20 rounded-lg text-sm font-medium hover:bg-white/30"
+              >
+                Go to Today
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Past Date Indicator */}
+        {isViewingPast && (
+          <div className="mt-3 bg-amber-500/20 border border-amber-300/30 rounded-xl px-3 py-2 text-center">
+            <p className="text-sm text-amber-100">
+              Viewing past date - you can still edit entries
+            </p>
+          </div>
+        )}
       </header>
 
       {/* Main Content */}
@@ -136,7 +281,7 @@ function App() {
             <div>
               <p className="text-sm text-gray-500 dark:text-gray-400">Consumed</p>
               <p className={`text-3xl font-bold ${isOverBudget ? 'text-red-500' : 'text-gray-800 dark:text-white'}`}>
-                {totalCalories}
+                {totalCalories.toLocaleString()}
                 <span className="text-lg font-normal text-gray-400"> cal</span>
               </p>
             </div>
@@ -145,7 +290,7 @@ function App() {
                 {isOverBudget ? 'Over by' : 'Remaining'}
               </p>
               <p className={`text-2xl font-semibold ${isOverBudget ? 'text-red-500' : 'text-emerald-500'}`}>
-                {isOverBudget ? '+' : ''}{Math.abs(remainingCalories)}
+                {isOverBudget ? '+' : ''}{Math.abs(remainingCalories).toLocaleString()}
               </p>
             </div>
           </div>
@@ -160,7 +305,41 @@ function App() {
             </div>
             <div className="flex justify-between mt-1">
               <span className="text-xs text-gray-400">0</span>
-              <span className="text-xs text-gray-400">{entry.targetCalories} cal goal</span>
+              {/* Editable Calorie Target */}
+              {editingCalories ? (
+                <div className="flex items-center gap-1">
+                  <input
+                    type="number"
+                    value={tempCalorieTarget}
+                    onChange={(e) => setTempCalorieTarget(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSaveCalorieTarget()}
+                    className="w-16 px-1 py-0.5 text-xs text-center border rounded bg-white dark:bg-gray-700 dark:text-white"
+                    autoFocus
+                  />
+                  <button
+                    onClick={handleSaveCalorieTarget}
+                    className="text-emerald-500 text-xs font-medium"
+                  >
+                    Save
+                  </button>
+                  <button
+                    onClick={() => setEditingCalories(false)}
+                    className="text-gray-400 text-xs"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={startEditingCalories}
+                  className="text-xs text-gray-400 hover:text-emerald-500 transition-colors flex items-center gap-1"
+                >
+                  <span>{entry.targetCalories.toLocaleString()} cal goal</span>
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                  </svg>
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -178,7 +357,7 @@ function App() {
 
           {entry.meals.length === 0 ? (
             <div className="text-center py-6">
-              <p className="text-gray-400 dark:text-gray-500 text-sm">No meals yet today</p>
+              <p className="text-gray-400 dark:text-gray-500 text-sm">No meals yet {isToday ? 'today' : 'on this day'}</p>
               <button
                 onClick={() => setActiveModal('meal')}
                 className="mt-2 text-emerald-500 text-sm font-medium"
@@ -221,56 +400,62 @@ function App() {
           )}
         </div>
 
-        {/* Workouts Section */}
+        {/* Exercises Section (New Format) */}
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-4">
           <div className="flex justify-between items-center mb-3">
             <h2 className="font-semibold text-gray-800 dark:text-white flex items-center gap-2">
-              <span className="text-lg">💪</span> Workouts
+              <span className="text-lg">💪</span> Exercises
             </h2>
             <span className="text-sm text-gray-500 dark:text-gray-400">
-              {entry.workouts.length} logged
+              {(entry.exercises || []).length} logged
             </span>
           </div>
 
-          {entry.workouts.length === 0 ? (
+          {(entry.exercises || []).length === 0 ? (
             <div className="text-center py-6">
-              <p className="text-gray-400 dark:text-gray-500 text-sm">No workouts yet today</p>
+              <p className="text-gray-400 dark:text-gray-500 text-sm">No exercises logged {isToday ? 'today' : 'on this day'}</p>
               <button
-                onClick={() => setActiveModal('workout')}
-                className="mt-2 text-emerald-500 text-sm font-medium"
+                onClick={() => setActiveModal('exercise')}
+                className="mt-2 text-blue-500 text-sm font-medium"
               >
-                + Log a workout
+                + Log exercises
               </button>
             </div>
           ) : (
-            <ul className="space-y-2">
-              {entry.workouts.map((workout) => (
-                <li
-                  key={workout.id}
-                  className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/50 rounded-xl"
-                >
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-gray-800 dark:text-gray-100">{workout.type}</p>
-                    {workout.notes && (
-                      <p className="text-sm text-gray-500 dark:text-gray-400 truncate">{workout.notes}</p>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2 ml-2">
-                    <span className="font-semibold text-blue-600 dark:text-blue-400 whitespace-nowrap">
-                      {workout.duration} min
-                    </span>
+            <>
+              <ul className="space-y-2">
+                {(entry.exercises || []).map((ex) => (
+                  <li
+                    key={ex.id}
+                    className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/50 rounded-xl"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-gray-800 dark:text-gray-100">
+                        {ex.name}
+                      </p>
+                      <p className="text-sm text-blue-600 dark:text-blue-400">
+                        {ex.weight} lbs x {ex.reps} reps
+                        {ex.sets > 1 && ` x ${ex.sets} sets`}
+                      </p>
+                    </div>
                     <button
-                      onClick={() => deleteWorkout(workout.id)}
+                      onClick={() => deleteExercise(ex.id)}
                       className="p-1.5 text-gray-400 hover:text-red-500 transition-colors"
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                       </svg>
                     </button>
-                  </div>
-                </li>
-              ))}
-            </ul>
+                  </li>
+                ))}
+              </ul>
+              <button
+                onClick={() => setActiveModal('exercise')}
+                className="mt-3 w-full py-2 text-blue-500 text-sm font-medium border border-blue-200 dark:border-blue-800 rounded-xl hover:bg-blue-50 dark:hover:bg-blue-900/20"
+              >
+                + Add more exercises
+              </button>
+            </>
           )}
         </div>
 
@@ -280,7 +465,7 @@ function App() {
             <span className="text-lg">📝</span> Notes
           </h2>
           <textarea
-            placeholder="How are you feeling today? Any thoughts about your meals..."
+            placeholder={`How ${isToday ? 'are you feeling today' : 'did you feel'}? Any thoughts about your meals...`}
             value={entry.dailyNotes}
             onChange={handleNotesChange}
             rows={3}
@@ -323,13 +508,13 @@ function App() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                 </svg>
               </div>
-              <span className="font-medium text-gray-700 dark:text-gray-200">Manual Entry</span>
+              <span className="font-medium text-gray-700 dark:text-gray-200">Add Meal</span>
             </button>
 
-            {/* Add Workout Button */}
+            {/* Log Exercises Button */}
             <button
               onClick={() => {
-                setActiveModal('workout')
+                setActiveModal('exercise')
                 setShowFab(false)
               }}
               className="flex items-center gap-2 bg-white dark:bg-gray-800 pl-4 pr-5 py-3 rounded-full shadow-lg animate-fade-in"
@@ -339,7 +524,7 @@ function App() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                 </svg>
               </div>
-              <span className="font-medium text-gray-700 dark:text-gray-200">Add Workout</span>
+              <span className="font-medium text-gray-700 dark:text-gray-200">Log Exercises</span>
             </button>
           </>
         )}
@@ -421,63 +606,14 @@ function App() {
         </div>
       )}
 
-      {/* Add Workout Modal */}
-      {activeModal === 'workout' && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50" onClick={() => setActiveModal(null)}>
-          <div className="bg-white dark:bg-gray-800 w-full max-w-md rounded-t-3xl p-6 animate-slide-up" onClick={e => e.stopPropagation()}>
-            <div className="w-12 h-1 bg-gray-300 dark:bg-gray-600 rounded-full mx-auto mb-4" />
-            <h2 className="text-xl font-bold text-gray-800 dark:text-white mb-4">Log Workout</h2>
-
-            <form onSubmit={handleAddWorkout} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Workout Type *
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g., Running, Weights, Yoga"
-                  value={workoutForm.type}
-                  onChange={(e) => setWorkoutForm({ ...workoutForm, type: e.target.value })}
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Duration (minutes)
-                </label>
-                <input
-                  type="number"
-                  placeholder="e.g., 30"
-                  value={workoutForm.duration}
-                  onChange={(e) => setWorkoutForm({ ...workoutForm, duration: e.target.value })}
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Notes
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g., Felt great, new PR!"
-                  value={workoutForm.notes}
-                  onChange={(e) => setWorkoutForm({ ...workoutForm, notes: e.target.value })}
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                />
-              </div>
-
-              <button
-                type="submit"
-                className="w-full py-3.5 bg-blue-500 text-white font-semibold rounded-xl hover:bg-blue-600 active:scale-[0.98] transition-all"
-              >
-                Log Workout
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
+      {/* Exercise Modal */}
+      <ExerciseModal
+        isOpen={activeModal === 'exercise'}
+        onClose={() => setActiveModal(null)}
+        onAddExercise={addExercise}
+        onDeleteExercise={deleteExercise}
+        exercises={entry.exercises || []}
+      />
 
       {/* Food Scanner Modal */}
       <FoodScanner

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { db, createEmptyEntry, generateId } from '../utils/db'
+import { db, createEmptyEntry, generateId, getDefaultCalorieTarget, addExerciseToHistory } from '../utils/db'
 
 /**
  * Custom hook for loading and saving daily entries
@@ -22,7 +22,17 @@ export function useDaily(date) {
       try {
         const existing = await db.dailyEntries.get(date)
         if (!cancelled) {
-          setEntry(existing || createEmptyEntry(date))
+          if (existing) {
+            // Ensure exercises array exists for backwards compatibility
+            setEntry({
+              ...existing,
+              exercises: existing.exercises || []
+            })
+          } else {
+            // Get default calorie target for new entries
+            const defaultTarget = await getDefaultCalorieTarget()
+            setEntry(createEmptyEntry(date, defaultTarget))
+          }
         }
       } catch (err) {
         if (!cancelled) {
@@ -136,6 +146,59 @@ export function useDaily(date) {
     await saveEntry(updatedEntry)
   }, [entry, saveEntry])
 
+  // Add an exercise (new format)
+  const addExercise = useCallback(async (exercise) => {
+    const newExercise = {
+      id: generateId(),
+      name: exercise.name || '',
+      weight: exercise.weight || 0,
+      reps: exercise.reps || 0,
+      sets: exercise.sets || 1,
+      time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })
+    }
+
+    const updatedEntry = {
+      ...entry,
+      exercises: [...(entry.exercises || []), newExercise]
+    }
+
+    await saveEntry(updatedEntry)
+
+    // Add to exercise history for autocomplete
+    if (exercise.name) {
+      await addExerciseToHistory(exercise.name)
+    }
+
+    return newExercise
+  }, [entry, saveEntry])
+
+  // Update an exercise
+  const updateExercise = useCallback(async (exerciseId, updates) => {
+    const updatedEntry = {
+      ...entry,
+      exercises: (entry.exercises || []).map(ex =>
+        ex.id === exerciseId ? { ...ex, ...updates } : ex
+      )
+    }
+
+    await saveEntry(updatedEntry)
+
+    // Update exercise history if name changed
+    if (updates.name) {
+      await addExerciseToHistory(updates.name)
+    }
+  }, [entry, saveEntry])
+
+  // Delete an exercise
+  const deleteExercise = useCallback(async (exerciseId) => {
+    const updatedEntry = {
+      ...entry,
+      exercises: (entry.exercises || []).filter(ex => ex.id !== exerciseId)
+    }
+
+    await saveEntry(updatedEntry)
+  }, [entry, saveEntry])
+
   // Update daily notes
   const updateDailyNotes = useCallback(async (notes) => {
     const updatedEntry = {
@@ -175,7 +238,12 @@ export function useDaily(date) {
     updateMeal,
     deleteMeal,
 
-    // Workout actions
+    // Exercise actions (new format)
+    addExercise,
+    updateExercise,
+    deleteExercise,
+
+    // Workout actions (legacy)
     addWorkout,
     updateWorkout,
     deleteWorkout,
