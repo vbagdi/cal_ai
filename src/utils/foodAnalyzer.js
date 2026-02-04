@@ -1,14 +1,11 @@
-import { getApiKey } from './settings'
-
 /**
  * Analyze a food image using Claude API
  * @param {string} base64Image - Base64 encoded image (without data URL prefix)
  * @param {string} mediaType - Image media type (e.g., 'image/jpeg', 'image/png')
+ * @param {string} apiKey - The Claude API key
  * @returns {Promise<object>} - Analyzed food data
  */
-export async function analyzeFoodImage(base64Image, mediaType = 'image/jpeg') {
-  const apiKey = getApiKey()
-
+export async function analyzeFoodImage(base64Image, mediaType = 'image/jpeg', apiKey) {
   if (!apiKey) {
     throw new Error('API key not configured. Please add your Claude API key in settings.')
   }

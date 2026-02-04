@@ -1,17 +1,78 @@
-# React + Vite
+# CalTrack
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A personal calorie tracking Progressive Web App (PWA) with AI-powered food scanning.
 
-Currently, two official plugins are available:
+## Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- Track daily meals and workouts
+- AI food scanning using Claude API (claude-sonnet-4-20250514) for automatic nutrition detection
+- Calorie progress tracking with visual progress bar
+- Daily notes for journaling
+- Works offline as a PWA
+- Mobile-first responsive design
 
-## React Compiler
+## Security
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+CalTrack is designed for **personal device use only**. Your data stays on your device and is protected by multiple security layers:
 
-## Expanding the ESLint configuration
+### Authentication
+- Password-protected access with PBKDF2 hashing (100,000 iterations)
+- Optional biometric authentication (Face ID / Fingerprint) via WebAuthn
+- Account lockout after 5 failed login attempts (30-second lockout)
+- Auto-lock after 5 minutes of tab inactivity
+- 30-minute session timeout
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
-# cal_ai
+### API Key Protection
+- Your Claude API key is encrypted with AES-256-GCM
+- Encryption key is derived from your password using PBKDF2
+- The key is only decrypted in memory during active sessions
+- Never stored in plaintext
+
+### Data Storage
+- All data stored locally in IndexedDB (via Dexie.js)
+- No data sent to external servers (except Claude API for food scanning)
+- "Delete All Data" option available in Settings
+
+### Important Notes
+- This app is designed for personal use on trusted devices
+- Do not share your device with untrusted parties while logged in
+- Your password cannot be recovered - there is no "forgot password" option
+- Deleting all data is permanent and cannot be undone
+
+## Getting Started
+
+### Prerequisites
+- Node.js 18+
+- npm or yarn
+
+### Installation
+
+```bash
+# Install dependencies
+npm install
+
+# Start development server
+npm run dev
+
+# Build for production
+npm run build
+```
+
+### Configuration
+
+1. Open the app and create a password on first launch
+2. Optionally enable biometric authentication
+3. Add your Claude API key in Settings (get one from [console.anthropic.com](https://console.anthropic.com/settings/keys))
+
+## Tech Stack
+
+- React + Vite
+- Tailwind CSS v4
+- Dexie.js (IndexedDB)
+- Web Crypto API (PBKDF2, AES-256-GCM)
+- WebAuthn API (biometrics)
+- vite-plugin-pwa (PWA support)
+
+## License
+
+MIT

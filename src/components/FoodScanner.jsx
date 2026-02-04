@@ -1,8 +1,9 @@
 import { useState, useRef } from 'react'
 import { analyzeFoodImage, fileToBase64 } from '../utils/foodAnalyzer'
-import { hasApiKey } from '../utils/settings'
+import { useAuth } from '../contexts/AuthContext'
 
 export function FoodScanner({ isOpen, onClose, onAddMeal }) {
+  const { decryptedApiKey, hasApiKey } = useAuth()
   const [step, setStep] = useState('capture') // 'capture' | 'analyzing' | 'results' | 'error'
   const [imagePreview, setImagePreview] = useState(null)
   const [analysisResult, setAnalysisResult] = useState(null)
@@ -26,7 +27,7 @@ export function FoodScanner({ isOpen, onClose, onAddMeal }) {
     if (!file) return
 
     // Check for API key first
-    if (!hasApiKey()) {
+    if (!decryptedApiKey) {
       setError('Please add your Claude API key in Settings first.')
       setStep('error')
       return
@@ -40,7 +41,7 @@ export function FoodScanner({ isOpen, onClose, onAddMeal }) {
 
       // Convert to base64 and analyze
       const { base64, mediaType } = await fileToBase64(file)
-      const result = await analyzeFoodImage(base64, mediaType)
+      const result = await analyzeFoodImage(base64, mediaType, decryptedApiKey)
 
       setAnalysisResult(result)
       setStep('results')
@@ -149,10 +150,12 @@ export function FoodScanner({ isOpen, onClose, onAddMeal }) {
               />
             </div>
 
-            {!hasApiKey() && (
+            {!decryptedApiKey && (
               <div className="mt-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-3">
                 <p className="text-xs text-amber-700 dark:text-amber-300">
-                  ⚠️ API key required. Add your Claude API key in Settings to use food scanning.
+                  {hasApiKey
+                    ? '⚠️ API key is encrypted. Please re-login with your password to unlock scanning.'
+                    : '⚠️ API key required. Add your Claude API key in Settings to use food scanning.'}
                 </p>
               </div>
             )}

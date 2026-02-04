@@ -2,11 +2,32 @@ import Dexie from 'dexie'
 
 export const db = new Dexie('CalTrackDB')
 
-// Database schema
+// Database schema - version 2 adds auth table
 db.version(1).stores({
-  // Daily entries indexed by date (YYYY-MM-DD format)
   dailyEntries: 'date'
 })
+
+db.version(2).stores({
+  dailyEntries: 'date',
+  auth: 'id' // Single record with id='main'
+})
+
+/**
+ * Auth Schema:
+ * {
+ *   id: 'main',                    // Always 'main' - single record
+ *   passwordHash: string,          // PBKDF2 hash (base64)
+ *   salt: string,                  // Salt for PBKDF2 (base64)
+ *   encryptedApiKey: string|null,  // AES-256-GCM encrypted API key (base64)
+ *   apiKeyIV: string|null,         // IV for API key encryption (base64)
+ *   biometricEnabled: boolean,     // Whether biometric auth is enabled
+ *   biometricCredentialId: string|null, // WebAuthn credential ID (base64)
+ *   failedAttempts: number,        // Count of failed login attempts
+ *   lockoutUntil: number|null,     // Timestamp when lockout expires
+ *   createdAt: number,             // Timestamp of account creation
+ *   targetCalories: number         // Default calorie goal
+ * }
+ */
 
 /**
  * Daily Entry Schema:
@@ -36,17 +57,36 @@ db.version(1).stores({
  */
 
 // Helper to create a default empty entry for a date
-export function createEmptyEntry(date) {
+export function createEmptyEntry(date, targetCalories = 2000) {
   return {
     date,
     meals: [],
     workouts: [],
     dailyNotes: '',
-    targetCalories: 2000
+    targetCalories
   }
 }
 
 // Generate a unique ID for meals/workouts
 export function generateId() {
   return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+}
+
+// Auth helper functions
+export async function getAuthData() {
+  return await db.auth.get('main')
+}
+
+export async function setAuthData(data) {
+  return await db.auth.put({ ...data, id: 'main' })
+}
+
+export async function hasAuthSetup() {
+  const auth = await getAuthData()
+  return !!auth?.passwordHash
+}
+
+export async function deleteAllData() {
+  await db.dailyEntries.clear()
+  await db.auth.clear()
 }
