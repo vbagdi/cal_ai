@@ -7,9 +7,7 @@ import {
   decryptData,
   isBiometricAvailable,
   registerBiometric,
-  authenticateBiometric,
-  generateSalt,
-  bufferToBase64
+  authenticateBiometric
 } from '../utils/crypto'
 
 const AuthContext = createContext(null)
@@ -244,17 +242,28 @@ export function AuthProvider({ children }) {
 
       // Decrypt API key if exists
       let apiKey = null
+      console.log('[Auth] Login - checking for encrypted API key:', {
+        hasEncryptedApiKey: !!authData.encryptedApiKey,
+        hasApiKeyIV: !!authData.apiKeyIV,
+        encryptedKeyLength: authData.encryptedApiKey?.length,
+        ivLength: authData.apiKeyIV?.length
+      })
+
       if (authData.encryptedApiKey && authData.apiKeyIV) {
         try {
+          console.log('[Auth] Attempting to decrypt API key with salt:', authData.salt?.substring(0, 10) + '...')
           apiKey = await decryptData(
             authData.encryptedApiKey,
             authData.apiKeyIV,
             password,
             authData.salt
           )
+          console.log('[Auth] API key decrypted successfully, key length:', apiKey?.length)
         } catch (e) {
-          console.error('Failed to decrypt API key:', e)
+          console.error('[Auth] Failed to decrypt API key:', e)
         }
+      } else {
+        console.log('[Auth] No encrypted API key found in authData')
       }
 
       // Create session
@@ -368,18 +377,30 @@ export function AuthProvider({ children }) {
   // Save API key (encrypt and store)
   const saveApiKey = useCallback(async (apiKey, password = currentPassword) => {
     try {
+      console.log('[Auth] saveApiKey called, hasPassword:', !!password)
+
       if (!password) {
         return { success: false, error: 'Password required to encrypt API key' }
       }
 
       const authData = await getAuthData()
-      const { encrypted, iv } = await encryptData(apiKey, password, authData.salt)
+      console.log('[Auth] Current authData salt:', authData?.salt ? 'exists' : 'missing')
 
-      await setAuthData({
+      const { encrypted, iv } = await encryptData(apiKey, password, authData.salt)
+      console.log('[Auth] API key encrypted, encrypted length:', encrypted?.length, 'iv length:', iv?.length)
+
+      const updatedAuthData = {
         ...authData,
         encryptedApiKey: encrypted,
         apiKeyIV: iv
-      })
+      }
+
+      await setAuthData(updatedAuthData)
+      console.log('[Auth] Encrypted API key saved to IndexedDB')
+
+      // Verify it was saved
+      const verifyData = await getAuthData()
+      console.log('[Auth] Verification - encryptedApiKey exists:', !!verifyData?.encryptedApiKey, 'apiKeyIV exists:', !!verifyData?.apiKeyIV)
 
       setDecryptedApiKey(apiKey)
       setAuthState(prev => ({
@@ -389,7 +410,7 @@ export function AuthProvider({ children }) {
 
       return { success: true }
     } catch (error) {
-      console.error('Save API key error:', error)
+      console.error('[Auth] Save API key error:', error)
       return { success: false, error: error.message }
     }
   }, [currentPassword])

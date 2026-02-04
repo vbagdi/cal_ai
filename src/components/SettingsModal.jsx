@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
+import { testApiKey } from '../utils/foodAnalyzer'
 
 export function SettingsModal({ isOpen, onClose }) {
   const {
@@ -27,6 +28,10 @@ export function SettingsModal({ isOpen, onClose }) {
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState('')
 
+  // API test state
+  const [testing, setTesting] = useState(false)
+  const [testResult, setTestResult] = useState(null) // { success: boolean, error?: string }
+
   useEffect(() => {
     if (isOpen) {
       // Show the decrypted API key if available, otherwise empty
@@ -36,6 +41,7 @@ export function SettingsModal({ isOpen, onClose }) {
       setShowDeleteConfirm(false)
       setDeletePassword('')
       setDeleteError('')
+      setTestResult(null)
 
       // Check biometric availability
       checkBiometricAvailable().then(setBiometricAvailable)
@@ -50,6 +56,7 @@ export function SettingsModal({ isOpen, onClose }) {
 
     setSaving(true)
     setError('')
+    setTestResult(null)
 
     const result = await saveApiKey(apiKey)
 
@@ -61,6 +68,25 @@ export function SettingsModal({ isOpen, onClose }) {
     } else {
       setError(result.error || 'Failed to save API key')
     }
+  }
+
+  const handleTestApiKey = async () => {
+    // Use either the input field value or the decrypted key
+    const keyToTest = apiKey.trim() || decryptedApiKey
+
+    if (!keyToTest) {
+      setTestResult({ success: false, error: 'No API key to test' })
+      return
+    }
+
+    setTesting(true)
+    setTestResult(null)
+    setError('')
+
+    const result = await testApiKey(keyToTest)
+
+    setTesting(false)
+    setTestResult(result)
   }
 
   const handleToggleBiometric = async () => {
@@ -169,17 +195,37 @@ export function SettingsModal({ isOpen, onClose }) {
                 <p className="mt-2 text-sm text-red-500">{error}</p>
               )}
 
-              <button
-                onClick={handleSaveApiKey}
-                disabled={saving || !apiKey.trim()}
-                className={`mt-3 w-full py-2.5 font-semibold rounded-xl transition-all ${
-                  saved
-                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
-                    : 'bg-emerald-500 text-white hover:bg-emerald-600 active:scale-[0.98] disabled:opacity-50'
-                }`}
-              >
-                {saving ? 'Encrypting...' : saved ? '✓ Saved & Encrypted!' : hasApiKey ? 'Update API Key' : 'Save API Key'}
-              </button>
+              <div className="flex gap-2 mt-3">
+                <button
+                  onClick={handleSaveApiKey}
+                  disabled={saving || !apiKey.trim()}
+                  className={`flex-1 py-2.5 font-semibold rounded-xl transition-all ${
+                    saved
+                      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+                      : 'bg-emerald-500 text-white hover:bg-emerald-600 active:scale-[0.98] disabled:opacity-50'
+                  }`}
+                >
+                  {saving ? 'Encrypting...' : saved ? '✓ Saved!' : hasApiKey ? 'Update' : 'Save'}
+                </button>
+                <button
+                  onClick={handleTestApiKey}
+                  disabled={testing || (!apiKey.trim() && !decryptedApiKey)}
+                  className="px-4 py-2.5 border-2 border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400 font-semibold rounded-xl hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors disabled:opacity-50"
+                >
+                  {testing ? 'Testing...' : 'Test API'}
+                </button>
+              </div>
+
+              {/* Test Result */}
+              {testResult && (
+                <div className={`mt-2 p-2 rounded-lg text-sm ${
+                  testResult.success
+                    ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300'
+                    : 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300'
+                }`}>
+                  {testResult.success ? '✓ API key is valid!' : `✗ ${testResult.error}`}
+                </div>
+              )}
             </div>
 
             {/* Biometric Section */}

@@ -6,6 +6,14 @@
  * @returns {Promise<object>} - Analyzed food data
  */
 export async function analyzeFoodImage(base64Image, mediaType = 'image/jpeg', apiKey) {
+  console.log('[FoodAnalyzer] analyzeFoodImage called', {
+    hasApiKey: !!apiKey,
+    apiKeyLength: apiKey?.length,
+    apiKeyPrefix: apiKey?.substring(0, 10) + '...',
+    mediaType,
+    base64Length: base64Image?.length
+  })
+
   if (!apiKey) {
     throw new Error('API key not configured. Please add your Claude API key in settings.')
   }
@@ -69,8 +77,24 @@ Be as accurate as possible with your estimates. If you cannot identify a food it
     })
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}))
-      throw new Error(errorData.error?.message || `API request failed: ${response.status}`)
+      const errorText = await response.text()
+      console.error('[FoodAnalyzer] API Error Response:', {
+        status: response.status,
+        statusText: response.statusText,
+        body: errorText
+      })
+      let errorMessage = `API request failed: ${response.status}`
+      try {
+        const errorData = JSON.parse(errorText)
+        errorMessage = errorData.error?.message || errorMessage
+        console.error('[FoodAnalyzer] Parsed error:', errorData)
+      } catch {
+        // Not JSON, use raw text
+        if (errorText) {
+          errorMessage = errorText.substring(0, 200)
+        }
+      }
+      throw new Error(errorMessage)
     }
 
     const data = await response.json()
@@ -95,6 +119,64 @@ Be as accurate as possible with your estimates. If you cannot identify a food it
   } catch (error) {
     console.error('Food analysis error:', error)
     throw error
+  }
+}
+
+/**
+ * Test the API key with a simple text request (no image)
+ * @param {string} apiKey - The Claude API key
+ * @returns {Promise<{success: boolean, error?: string}>}
+ */
+export async function testApiKey(apiKey) {
+  console.log('[FoodAnalyzer] Testing API key...')
+
+  if (!apiKey) {
+    return { success: false, error: 'No API key provided' }
+  }
+
+  try {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 10,
+        messages: [
+          {
+            role: 'user',
+            content: 'Say "OK" and nothing else.'
+          }
+        ]
+      })
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error('[FoodAnalyzer] Test API Error:', {
+        status: response.status,
+        body: errorText
+      })
+      let errorMessage = `API error: ${response.status}`
+      try {
+        const errorData = JSON.parse(errorText)
+        errorMessage = errorData.error?.message || errorMessage
+      } catch {
+        if (errorText) errorMessage = errorText.substring(0, 100)
+      }
+      return { success: false, error: errorMessage }
+    }
+
+    const data = await response.json()
+    console.log('[FoodAnalyzer] Test API Success:', data.content?.[0]?.text)
+    return { success: true }
+  } catch (error) {
+    console.error('[FoodAnalyzer] Test API Exception:', error)
+    return { success: false, error: error.message }
   }
 }
 
